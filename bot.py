@@ -1,6 +1,5 @@
 import os
 import logging
-import asyncio
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -8,6 +7,7 @@ from telegram.ext import (
     PollAnswerHandler,
     ContextTypes,
 )
+from aiohttp import web
 
 # लॉगिंग सेट अप
 logging.basicConfig(
@@ -15,7 +15,20 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# क्विज़ बैंक (आप इसमें जितने चाहें उतने सवाल बढ़ा सकते हैं)
+# 1. Render के लिए एक असली Web Server (ताकि Port 8080 ओपन रहे और Render खुश रहे)
+async def handle(request):
+    return web.Response(text="BrainX Quiz Pro Bot is live and running 24/7!")
+
+async def start_web_server():
+    app_web = web.Application()
+    app_web.router.add_get("/", handle)
+    runner = web.AppRunner(app_web)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+# क्विज़ डेटा बैंक
 QUIZ_DATA = [
     {
         "question": "भारत की राजधानी क्या है?",
@@ -49,10 +62,8 @@ QUIZ_DATA = [
     }
 ]
 
-# चैट के हिसाब से गेम और स्कोर ट्रैक करने के लिए डिक्शनरी
 active_games = {}
 
-# /start कमांड
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🔥 **नमस्ते! मैं आपका अपना एडवांस BrainX Quiz Pro Bot हूँ।**\n\n"
@@ -60,7 +71,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✨ *यहाँ हर खिलाड़ी का सम्मान होता है और सब विनर बनते हैं!*"
     )
 
-# /quiz कमांड जो गेम शुरू करेगा
 async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
@@ -68,21 +78,18 @@ async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ इस चैट में क्विज़ पहले से चल रहा है! कृपया इसे पूरा होने दें।")
         return
 
-    # नया गेम डेटा सेट करें
     active_games[chat_id] = {
         "current_q": 0,
-        "scores": {},      # {user_id: {"name": str, "score": int}}
+        "scores": {},
         "active": True
     }
     
     await update.message.reply_text(
         "🚀 **BrainX मेगा क्विज़ मुकाबला शुरू हो चुका है!**\n"
-        "पूरी ऊर्जा के साथ तैयार हो जाइए, सवाल आने वाले हैं... 🎯"
+        "तैयार हो जाइए, पहला सवाल आ रहा है... 🎯"
     )
-    await asyncio.sleep(2)
     await send_question(chat_id, context)
 
-# सवाल भेजने का फंक्शन
 async def send_question(chat_id, context):
     game = active_games.get(chat_id)
     if not game or not game["active"]:
@@ -90,14 +97,12 @@ async def send_question(chat_id, context):
 
     q_idx = game["current_q"]
     
-    # अगर सारे सवाल खत्म हो गए तो फाइनल लीडरबोर्ड दिखाएं
     if q_idx >= len(QUIZ_DATA):
         await show_final_leaderboard(chat_id, context)
         return
 
     q_data = QUIZ_DATA[q_idx]
     
-    # पोल भेजें
     await context.bot.send_poll(
         chat_id=chat_id,
         question=f"❓ सवाल {q_idx + 1} / {len(QUIZ_DATA)}:\n{q_data['question']}",
@@ -108,7 +113,6 @@ async def send_question(chat_id, context):
         explanation=q_data["explanation"]
     )
 
-# यूजर के जवाब और स्कोर को ट्रैक करने का एडवांस सिस्टम
 async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     answer = update.poll_answer
     user = answer.user
@@ -126,25 +130,19 @@ async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     game = active_games[chat_id]
-    q_idx = game["current_q"] - 1 # वर्तमान सवाल का इंडेक्स
+    q_idx = game["current_q"] - 1
     
     if q_idx < 0 or q_idx >= len(QUIZ_DATA):
         return
 
     correct_opt = QUIZ_DATA[q_idx]["correct"]
     
-    # अगर यूजर का डेटा डिक्शनरी में नहीं है तो जोड़ें
     if user_id not in game["scores"]:
         game["scores"][user_id] = {"name": user_name, "score": 0}
 
-    # अगर जवाब सही है तो पॉइंट बढ़ाएं
     if correct_opt in selected_options:
         game["scores"][user_id]["score"] += 1
 
-    # जैसे ही लोग वोट दें, कुछ सेकंड बाद अगला सवाल ऑटोमैटिक भेजें
-    # (चूंकि पोल का जवाब एक-एक करके आता है, हम इसे स्मूथ हैंडल कर रहे हैं)
-
-# फाइनल विनर और सबकी लिस्ट दिखाने वाला शानदार फंक्शन
 async def show_final_leaderboard(chat_id, context):
     game = active_games[chat_id]
     game["active"] = False
@@ -153,54 +151,45 @@ async def show_final_leaderboard(chat_id, context):
     if not scores_dict:
         await context.bot.send_message(
             chat_id=chat_id,
-            text="🏁 क्विज़ समाप्त हो गया है, लेकिन किसी ने भी जवाब नहीं दिया! अगली बार कोशिश जरूर करें। 💪"
+            text="🏁 क्विज़ समाप्त हो गया है, लेकिन किसी ने जवाब नहीं दिया! अगली बार कोशिश जरूर करें। 💪"
         )
         return
 
-    # स्कोर के हिसाब से खिलाड़ियों को सॉर्ट करना (सबसे ज्यादा स्कोर वाला सबसे ऊपर)
     sorted_players = sorted(scores_dict.values(), key=lambda x: x["score"], reverse=True)
-
-    # टॉप विनर्स निकालना
     first_winner = sorted_players[0]
     second_winner = sorted_players[1] if len(sorted_players) > 1 else None
     third_winner = sorted_players[2] if len(sorted_players) > 2 else None
 
-    # स्पेशल विनर मैसेज डिजाइन
     report = "🏆 **====================** 🏆\n"
     report += "       🌟 **MEGA QUIZ LEADERBOARD** 🌟\n"
     report += "🏆 **====================** 🏆\n\n"
 
-    # 🥇 पहला विनर (खास स्पेशल ट्रीटमेंट)
     report += f"👑 **CHAMPION OF THE MATCH** 👑\n"
-    report += f"🎉 दिल से बहुत-बहुत बधाई **{first_winner['name']}** जी! 🥇\n"
-    report += f"🔥 आपने शानदार प्रदर्शन करते हुए सबसे ज्यादा **{first_winner['score']}** अंक हासिल किए हैं और महफिल लूट ली! आप वाकई कमाल के खिलाड़ी हैं! 🚀\n\n"
+    report += f"🎉 बहुत-बहुत बधाई **{first_winner['name']}** जी! 🥇\n"
+    report += f"🔥 सबसे ज्यादा **{first_winner['score']}** अंक हासिल करके आपने महफिल लूट ली! 🚀\n\n"
 
-    # 🥈 दूसरा और 🥉 तीसरा विनर
     if second_winner:
-        report += f"🥈 **दूसरा स्थान:** {second_winner['name']} (स्कोर: {second_winner['score']}) - बहुत ही शानदार मुकाबला!\n"
+        report += f"🥈 **दूसरा स्थान:** {second_winner['name']} (स्कोर: {second_winner['score']})\n"
     if third_winner:
-        report += f"🥉 **तीसरा स्थान:** {third_winner['name']} (स्कोर: {third_winner['score']}) - बेहतरीन खेल!\n"
+        report += f"🥉 **तीसरा स्थान:** {third_winner['name']} (स्कोर: {third_winner['score']})\n"
 
-    report += "\n📜 **सभी सम्मानित खिलाड़ियों की पूरी सूची (Scoreboard):**\n"
+    report += "\n📜 **सभी खिलाड़ियों का स्कोरबोर्ड:**\n"
     report += "----------------------------------------\n"
 
-    # 100-50 जितने भी लोग हों, सबका नाम इस लिस्ट में आएगा!
     for idx, player in enumerate(sorted_players, start=1):
-        medal = ""
-        if idx == 1: medal = "🥇"
-        elif idx == 2: medal = "🥈"
-        elif idx == 3: medal = "🥉"
-        else: medal = f"#{idx}"
-        
+        medal = f"🥇" if idx == 1 else f"🥈" if idx == 2 else f"🥉" if idx == 3 else f"#{idx}"
         report += f"{medal} **{player['name']}** — {player['score']} Points\n"
 
     report += "----------------------------------------\n"
-    report += "💖 *जीत और हार तो खेल का हिस्सा है, असली बात सीखने और कोशिश करने की है! आप सभी विजेता हैं। अगली क्विज़ में फिर मिलते हैं!* ✨"
+    report += "💖 *जीत और हार खेल का हिस्सा है, कोशिश करने वाले सब विनर हैं!* ✨"
 
     await context.bot.send_message(chat_id=chat_id, text=report)
 
-def main():
+async def main():
     TOKEN = "8959348945:AAFTYLkJ-q40V46PR-InXwIG0qU3kpDLXig"
+    
+    # सबसे पहले वेब सर्वर शुरू करें ताकि Render का पोर्ट एरर हमेशा के लिए खत्म हो जाए
+    await start_web_server()
     
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -208,9 +197,15 @@ def main():
     app.add_handler(CommandHandler("quiz", quiz))
     app.add_handler(PollAnswerHandler(receive_poll_answer))
 
-    print("BrainX Quiz Pro Bot 24/7 live हो गया है...")
-    app.run_polling(drop_pending_updates=True)
+    print("BrainX Quiz Pro Bot live & running...")
+    
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(drop_pending_updates=True)
+    
+    import asyncio
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
-    
+    import asyncio
+    asyncio.run(main())
