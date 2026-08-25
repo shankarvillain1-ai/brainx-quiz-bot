@@ -2,12 +2,26 @@ import os
 import logging
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from aiohttp import web
 
 # लॉगिंग सेट अप
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+
+# Render के लिए डमी वेब सर्वर ताकि सर्विस 24/7 एक्टिव रहे
+async def handle(request):
+    return web.Response(text="BrainX Quiz Bot is running successfully!")
+
+async def web_server():
+    app_web = web.Application()
+    app_web.router.add_get("/", handle)
+    runner = web.AppRunner(app_web)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
 
 # /start कमांड
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -19,10 +33,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
-    # यहाँ आप अपना सवाल सेट कर सकते हैं
     question = "भारत की राजधानी क्या है?"
     options = ["मुंबई", "नई दिल्ली", "कोलकाता", "चेन्नई"]
-    correct_option_id = 1  # 1 का मतलब 'नई दिल्ली' सही है (गिनती 0 से शुरू होती है)
+    correct_option_id = 1  # नई दिल्ली सही जवाब
 
     await context.bot.send_poll(
         chat_id=chat_id,
@@ -34,9 +47,12 @@ async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
         explanation="सही उत्तर नई दिल्ली है!"
     )
 
-def main():
-    # सीधे आपके बॉट का टोकन यहाँ सेट है
-    TOKEN = "8765282652:AAFBoehcJDeZvIX0H7AlLqhQXO935LqQifM"
+async def main():
+    # नया और फ्रेश बॉट टोकन यहाँ सेट है
+    TOKEN = "8959348945:AAFTYLkJ-q40V46PR-InXwIG0qU3kpDLXig"
+    
+    # पहले वेब सर्वर शुरू करें
+    await web_server()
     
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -44,7 +60,16 @@ def main():
     app.add_handler(CommandHandler("quiz", quiz))
 
     print("BrainX Quiz Bot 24/7 live हो गया है...")
-    app.run_polling()
+    
+    # बॉट रन करें (old updates को ड्रॉप करने के लिए)
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(drop_pending_updates=True)
+    
+    # बॉट को चालू रखने के लिए
+    import asyncio
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
