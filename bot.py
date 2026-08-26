@@ -32,7 +32,7 @@ async def start_web_server():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
-# ==================== FULL QUESTION BANKS (सारे बैकअप प्रश्न) ====================
+# ==================== FULL QUESTION BANKS ====================
 
 GK_QUESTIONS = [
     {"question": "भारत का राष्ट्रीय गीत 'वंदे मातरम' किसने लिखा है?", "options": ["बंकिम चंद्र चट्टोपाध्याय", "रविंद्रनाथ टैगोर", "इक़बाल", "सरदार पटेल"], "correct": 0, "explanation": "वंदे मातरम बंकिम चंद्र चट्टोपाध्याय द्वारा आनंदमठ से लिया गया है।"},
@@ -71,25 +71,23 @@ ART_QUESTIONS = [
     {"question": "कुचिपुड़ी किस राज्य का शास्त्रीय नृत्य है?", "options": ["केरल", "आंध्र प्रदेश", "ओडिशा", "मणिपुर"], "correct": 1, "explanation": "कुचिपुड़ी आंध्र प्रदेश का शास्त्रीय नृत्य है।"}
 ]
 
-# डेटा स्टोरेज और गेम ट्रैकर
 user_custom_quizzes = {}
 creating_state = {}
 active_games = {}
 
-# /start कमांड
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🔥 **नमस्ते! आपका स्वागत है BrainX Quiz Pro Bot में।**\n\n"
-        "🎮 **उपलब्ध प्री-बिल्ड क्विज़ कमांड्स:**\n"
+        "🎮 **प्री-बिल्ड क्विज़ कमांड्स:**\n"
         "👉 `/gkquiz` - GK Quiz\n"
         "👉 `/hindiquiz` - Hindi Quiz\n"
         "👉 `/englishquiz` - English Quiz\n"
         "👉 `/artquiz` - Art & Culture Quiz\n\n"
         "💡 **इंस्टेंट पोल मेकर:**\n"
-        "सीधे मैसेज में इस तरह भेजकर तुरंत पोल बनाएँ:\n"
+        "मैसेज में इस तरह भेजकर तुरंत पोल बनाएँ:\n"
         "`सवाल यहाँ लिखें?`\n"
         "`ऑप्शन 1, ऑप्शन 2, ऑप्शन 3, ऑप्शन 4`\n"
-        "`सही विकल्प का नंबर (जैसे 1 या 2)`\n\n"
+        "`सही विकल्प का नंबर (जैसे 1)`\n\n"
         "📌 **अन्य कमांड्स:**\n"
         "👉 `/createquiz` - स्टेप-बाय-स्टेप क्विज़ बनाएँ\n"
         "👉 `/myquiz` - अपनी बनाई क्विज़ खेलें\n"
@@ -98,12 +96,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# प्री-बिल्ड क्विज़ शुरू करने का कॉमन फंक्शन
 async def start_quiz_session(update: Update, context: ContextTypes.DEFAULT_TYPE, q_list, quiz_name):
     chat_id = update.effective_chat.id
     
     if chat_id in active_games and active_games[chat_id]["active"]:
-        await update.message.reply_text("⚠️ इस चैट में पहले से क्विज़ चल रहा है! कृपया उसे पूरा होने दें या `/stopquiz` भेजें।")
+        await update.message.reply_text("⚠️ इस चैट में पहले से क्विज़ चल रहा है! कृपया इसे पूरा होने दें या `/stopquiz` भेजें।")
         return
 
     active_games[chat_id] = {
@@ -133,7 +130,6 @@ async def english_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def art_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start_quiz_session(update, context, ART_QUESTIONS, "Art & Culture Quiz")
 
-# सवाल भेजने का फंक्शन (15 सेकंड टाइमर के साथ)
 async def send_next_question(chat_id, context):
     game = active_games.get(chat_id)
     if not game or not game["active"]:
@@ -165,12 +161,10 @@ async def send_next_question(chat_id, context):
     if chat_id in active_games and active_games[chat_id]["active"]:
         await send_next_question(chat_id, context)
 
-# टेक्स्ट मैसेज और इंस्टेंट पोल क्रिएटर हैंडलर
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     text = update.message.text
 
-    # 1. इंस्टेंट पोल क्रिएटर (डायरेक्ट लिखकर भेजना)
     lines = [line.strip() for line in text.split("\n") if line.strip()]
     if len(lines) >= 3 and chat_id not in creating_state:
         question_text = lines[0]
@@ -198,7 +192,6 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
 
-    # 2. /createquiz स्टेप-बाय-स्टेप क्रिएशन लॉजिक
     if chat_id not in creating_state:
         return
 
@@ -218,11 +211,11 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     elif step == "get_options":
         options = [opt.strip() for opt in text.split(",")]
         if len(options) < 2:
-            await update.message.reply_text("⚠️ कृपया कम से कम 2 या 4 विकल्प सही फॉर्मेट में भेजें:")
+            await update.message.reply_text("⚠️ कृपया कम से कम 2 विकल्प सही फॉर्मेट में भेजें:")
             return
         state["current_options"] = options
         state["step"] = "get_correct"
-        await update.message.reply_text("अब सही विकल्प का **नंबर** (जैसे 1, 2, 3 या 4) लिखकर भेजें:")
+        await update.message.reply_text("अब सही विकल्प का **नंबर** (जैसे 1 या 2) लिखकर भेजें:")
 
     elif step == "get_correct":
         try:
@@ -231,7 +224,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             if not (0 <= correct_num < len(options)):
                 raise ValueError()
         except ValueError:
-            await update.message.reply_text("⚠️ कृपया सही विकल्प का मान्य नंबर (जैसे 1 या 2) ही भेजें:")
+            await update.message.reply_text("⚠️ कृपया सही विकल्प का मान्य नंबर भेजें:")
             return
 
         state["current_correct"] = correct_num
@@ -254,13 +247,11 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         ]
         await update.message.reply_text(f"✅ सवाल जुड़ गया! कुल सवाल: **{len(state['questions'])}**", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# /createquiz कमांड स्टार्ट
 async def create_quiz_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     creating_state[chat_id] = {"step": "get_title", "questions": []}
     await update.message.reply_text("📝 **नई क्विज़ बनाने की प्रक्रिया शुरू!** अपनी इस क्विज़ का **शीर्षक (Title)** भेजें:")
 
-# कॉलबैक क्वेरी हैंडलर
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -293,7 +284,6 @@ async def play_my_quiz_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("⚠️ आपकी कोई कस्टम क्विज़ नहीं मिली। `/createquiz` से बनाएँ!")
 
-# पोल आंसर ट्रैकर
 async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     answer = update.poll_answer
     user = answer.user
@@ -312,7 +302,6 @@ async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
                 if correct_opt in selected_options:
                     game["scores"][user_id]["score"] += 1
 
-# /stopquiz कमांड
 async def stop_quiz_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id in active_games and active_games[chat_id]["active"]:
@@ -322,7 +311,6 @@ async def stop_quiz_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("⚠️ इस समय कोई क्विज़ सक्रिय नहीं है।")
 
-# फाइनल लीडरबोर्ड (डेवलपर क्रेडिट @krishnazxy सबसे ऊपर)
 async def show_final_leaderboard(chat_id, context):
     game = active_games[chat_id]
     game["active"] = False
@@ -333,7 +321,6 @@ async def show_final_leaderboard(chat_id, context):
     report += f"   🌟 **{quiz_name.upper()} LEADERBOARD** 🌟\n"
     report += f"🏆 **====================** 🏆\n\n"
 
-    # 👑 डेवलपर क्रेडिट सबसे ऊपर
     report += f"👑 **Bot Developed & Created By:** @krishnazxy 🚀\n\n"
 
     if not scores_dict:
@@ -354,7 +341,8 @@ async def show_final_leaderboard(chat_id, context):
     await context.bot.send_message(chat_id=chat_id, text=report)
 
 async def main():
-    TOKEN = "8959348945:AAFTYLkJ-q40V46PR-InXwIG0qU3kpDLXig"
+    # 🔒 आपका नया सुरक्षित टोकन अपडेट कर दिया गया है
+    TOKEN = "8959348945:AAEMMcO3jXYeI5ylymY2dJE75NAqYxJPbxY"
     
     await start_web_server()
     
@@ -373,7 +361,7 @@ async def main():
     app.add_handler(CallbackQueryHandler(button_callback_handler))
     app.add_handler(PollAnswerHandler(receive_poll_answer))
 
-    print("BrainX Ultimate Quiz Pro Bot is running 24/7...")
+    print("BrainX Ultimate Quiz Pro Bot is running securely 24/7...")
     
     await app.initialize()
     await app.start()
