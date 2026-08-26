@@ -1,17 +1,20 @@
 import os
 import logging
 import asyncio
+import aiohttp
+import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    MessageHandler,
     CallbackQueryHandler,
     PollAnswerHandler,
+    MessageHandler,
     ContextTypes,
     filters
 )
 from aiohttp import web
+import random
 
 # लॉगिंग सेट अप
 logging.basicConfig(
@@ -19,9 +22,8 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Render के लिए Web Server
 async def handle(request):
-    return web.Response(text="BrainX Ultimate Quiz Pro Bot is live and running 24/7!")
+    return web.Response(text="BrainX Ultimate All-Exam AI PYQ Quiz Bot is live and running!")
 
 async def start_web_server():
     app_web = web.Application()
@@ -32,141 +34,194 @@ async def start_web_server():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
-# ==================== FULL QUESTION BANKS ====================
+# ==================== HUGE ALL-EXAM PYQ QUESTION BANK ====================
+SUBJECTS_DB = {
+    "gk": [
+        {"question": "[PYQ - UPSC/SSC] 'हंटर कमीशन' की रिपोर्ट में किसके विकास पर विशेष जोर दिया गया था?", "options": ["बालिका शिक्षा", "प्राथमिक शिक्षा", "उच्च शिक्षा", "तकनीकी शिक्षा"], "correct": 1, "explanation": "हंटर आयोग (1882) ने प्राथमिक शिक्षा के प्रसार और सुधार पर जोर दिया था।"},
+        {"question": "[PYQ - UPPSC/REET] निम्नलिखित में से किस गवर्नर-जनरल ने भारत में ठगी प्रथा का अंत किया था?", "options": ["लॉर्ड कार्नवालिस", "लॉर्ड विलियम बेंटिक", "लॉर्ड डलहौजी", "लॉर्ड कर्जन"], "correct": 1, "explanation": "लॉर्ड विलियम बेंटिक ने कर्नल स्लीमैन की सहायता से ठगी प्रथा का दमन किया।"},
+        {"question": "[PYQ - SSC CGL] सिंधु घाटी सभ्यता का कौन सा स्थल घग्गर नदी के किनारे स्थित था?", "options": ["लोथल", "कालीबंगा", "मोहनजोदड़ो", "हरप्पा"], "correct": 1, "explanation": "कालीबंगा घग्गर (सरस्वती) नदी के तट पर स्थित है।"},
+        {"question": "[PYQ - SSC/UPSC] 'कर्क रेखा' भारत के कितने राज्यों से होकर गुजरती है?", "options": ["6", "7", "8", "9"], "correct": 2, "explanation": "कर्क रेखा भारत के 8 राज्यों से गुजरती है।"},
+        {"question": "[PYQ - Geography] भारत की सबसे लंबी स्थलीय सीमा किस देश के साथ लगती है?", "options": ["चीन", "पाकिस्तान", "बांग्लादेश", "नेपाल"], "correct": 2, "explanation": "भारत की सबसे लंबी अंतरराष्ट्रीय सीमा बांग्लादेश के साथ है।"}
+    ],
+    "history": [
+        {"question": "[PYQ - History] जैन धर्म के 24वें तीर्थंकर कौन थे?", "options": ["ऋषभदेव", "पार्श्वनाथ", "महावीर स्वामी", "अरिष्टनेमी"], "correct": 2, "explanation": "भगवान महावीर जैन धर्म के अंतिम व 24वें तीर्थंकर थे।"},
+        {"question": "[PYQ - REET] राजस्थान में 'भगत आंदोलन' का नेतृत्व किसने किया था?", "options": ["गोविन्द गुरु", "मातृकुंडिया", "विजय सिंह पथिक", "जमुनालाल बजाज"], "correct": 0, "explanation": "गोविन्द गुरु ने संप सभा की स्थापना कर भीलों में भगत आंदोलन चलाया था।"},
+        {"question": "[PYQ - History] 1857 की क्रांति की शुरुआत कहाँ से हुई थी?", "options": ["दिल्ली", "कानपूर", "मेरठ", "झाँसी"], "correct": 2, "explanation": "1857 के विद्रोह की शुरुआत 10 मई को मेरठ से हुई थी।"},
+        {"question": "[PYQ - Ancient] 'अर्थशास्त्र' पुस्तक के लेखक कौन हैं?", "options": ["मेगस्थनीज", "चाणक्य", "कालिदास", "बाणभट्ट"], "correct": 1, "explanation": "अर्थशास्त्र चाणक्य (कौटिल्य) द्वारा लिखी गई थी।"}
+    ],
+    "polity": [
+        {"question": "[PYQ - UPSC] भारतीय संविधान के किस अनुच्छेद के तहत राज्यों को 'ग्राम पंचायतों' के संगठन का निर्देश है?", "options": ["अनुच्छेद 36", "अनुच्छेद 40", "अनुच्छेद 48", "अनुच्छेद 51"], "correct": 1, "explanation": "अनुच्छेद 40 ग्राम पंचायतों के संगठन से संबंधित है।"},
+        {"question": "[PYQ - SSC] लोकसभा और राज्यसभा की संयुक्त बैठक की अध्यक्षता कौन करता है?", "options": ["राष्ट्रपति", "राज्यसभा का सभापति", "लोकसभा अध्यक्ष", "प्रधानमंत्री"], "correct": 2, "explanation": "संयुक्त बैठक की अध्यक्षता लोकसभा अध्यक्ष करते हैं।"},
+        {"question": "[PYQ - UPPSC] प्रस्तावना में 'समाजवादी' और 'धर्मनिरपेक्ष' शब्द किस संशोधन से जोड़े गए?", "options": ["42वें संशोधन", "44वें संशोधन", "86वें संशोधन", "73वें संशोधन"], "correct": 0, "explanation": "1976 के 42वें संविधान संशोधन द्वारा जोड़े गए।"},
+        {"question": "[PYQ - Polity] भारत के महान्यायवादी (Attorney General) की नियुक्ति कौन करता है?", "options": ["प्रधानमंत्री", "राष्ट्रपति", "मुख्य न्यायाधीश", "लोकसभा अध्यक्ष"], "correct": 1, "explanation": "महान्यायवादी की नियुक्ति राष्ट्रपति द्वारा की जाती है।"}
+    ],
+    "science": [
+        {"question": "[PYQ - RRB/SSC] मनुष्य के शरीर में 'लाल रक्त कणिकाओं' (RBC) का निर्माण कहाँ होता है?", "options": ["तल्ली (Spleen)", "यकृत (Liver)", "अस्थिमज्जा (Bone Marrow)", "हृदय (Heart)"], "correct": 2, "explanation": "RBC का निर्माण लाल अस्थिमज्जा में होता है।"},
+        {"question": "[PYQ - Science] प्रकाश वर्ष (Light Year) किसका मात्रक है?", "options": ["समय", "दूरी", "प्रकाश तीव्रता", "वेग"], "correct": 1, "explanation": "प्रकाश वर्ष खगोलीय दूरियाँ मापने का मात्रक है।"},
+        {"question": "[PYQ - Science] विटामिन C का रासायनिक नाम क्या है?", "options": ["साइट्रिक एसिड", "एस्कॉर्बिक एसिड", "थियामीन", "टोकोफेरॉल"], "correct": 1, "explanation": "विटामिन C का रासायनिक नाम एस्कॉर्बिक एसिड है।"}
+    ],
+    "pedagogy": [
+        {"question": "[PYQ - UPTET/CTET] बाल मनोविज्ञान के अनुसार शिक्षा का केंद्र बिंदु क्या होता है?", "options": ["शिक्षक", "बालक (विद्यार्थी)", "विद्यालय", "पाठ्यक्रम"], "correct": 1, "explanation": "आधुनिक शिक्षा प्रणाली बाल-केंद्रित (Child-centric) है।"}
+    ],
+    "hindi_eng": [
+        {"question": "[PYQ - UPTET] 'उद्घाटन' का सही संधि-विच्छेद क्या होगा?", "options": ["उत् + घाटन", "उद् + घाटन", "उत् + धाटन", "उद + घाटन"], "correct": 0, "explanation": "उत् + घाटन = उद्घाटन (व्यंजन संधि)।"},
+        {"question": "[PYQ - SSC] Select the correct spelling:", "options": ["Lieutenant", "Leutinant", "Lietutenant", "Luitenant"], "correct": 0, "explanation": "Lieutenant की सही स्पेलिंग यही है।"},
+        {"question": "[PYQ - Hindi] 'जो सब कुछ जानता हो' वाक्यांश के लिए एक शब्द क्या होगा?", "options": ["अल्पज्ञ", "सर्वज्ञ", "विद्वान", "ज्ञानी"], "correct": 1, "explanation": "सब कुछ जानने वाले को सर्वज्ञ कहते हैं।"},
+        {"question": "[PYQ - English] What is the antonym of 'Abundant'?", "options": ["Scanty", "Plentiful", "Ample", "Generous"], "correct": 0, "explanation": "Abundant का विलोम Scanty होता है।"}
+    ]
+}
 
-GK_QUESTIONS = [
-    {"question": "भारत का राष्ट्रीय गीत 'वंदे मातरम' किसने लिखा है?", "options": ["बंकिम चंद्र चट्टोपाध्याय", "रविंद्रनाथ टैगोर", "इक़बाल", "सरदार पटेल"], "correct": 0, "explanation": "वंदे मातरम बंकिम चंद्र चट्टोपाध्याय द्वारा आनंदमठ से लिया गया है।"},
-    {"question": "भारत का संविधान कब लागू हुआ?", "options": ["15 अगस्त 1947", "26 जनवरी 1950", "26 नवंबर 1949", "2 अक्टूबर 1952"], "correct": 1, "explanation": "भारत का संविधान 26 जनवरी 1950 को पूर्ण रूप से लागू हुआ था।"},
-    {"question": "महात्मा गांधी ने असहयोग आंदोलन किस वर्ष शुरू किया था?", "options": ["1920", "1922", "1930", "1942"], "correct": 0, "explanation": "असहयोग आंदोलन की शुरुआत 1920 में महात्मा गांधी ने की थी।"},
-    {"question": "भारत में सबसे लंबी नदी कौन सी है?", "options": ["यमुना", "ब्रह्मपुत्र", "गंगा", "गोदावरी"], "correct": 2, "explanation": "गंगा भारत की सबसे लंबी नदी है।"},
-    {"question": "किस ग्रह को 'लाल ग्रह' कहा जाता है?", "options": ["शुक्र", "मंगल", "बुध", "शनि"], "correct": 1, "explanation": "आयरन ऑक्साइड की अधिकता के कारण मंगल ग्रह को लाल ग्रह कहते हैं।"},
-    {"question": "भारत के प्रथम प्रधानमंत्री कौन थे?", "options": ["डॉ. राजेंद्र प्रसाद", "जवाहरलाल नेहरू", "वल्लभभाई पटेल", "लाल बहादुर शास्त्री"], "correct": 1, "explanation": "पंडित जवाहरलाल नेहरू भारत के प्रथम प्रधानमंत्री थे।"},
-    {"question": "कंप्यूटर का आविष्कार किसने किया था?", "options": ["चार्ल्स बेबेज", "अल्बर्ट आइंस्टीन", "थॉमस एडिसन", "आइज़ैक न्यूटन"], "correct": 0, "explanation": "चार्ल्स बेबेज को कंप्यूटर का जनक कहा जाता है।"},
-    {"question": "राष्ट्रीय विज्ञान दिवस कब मनाया जाता है?", "options": ["28 फरवरी", "5 सितंबर", "15 अगस्त", "26 जनवरी"], "correct": 0, "explanation": "28 फरवरी को राष्ट्रीय विज्ञान दिवस मनाया जाता है।"},
-    {"question": "भारत का राष्ट्रीय पशु क्या है?", "options": ["शेर", "हाथी", "बाघ", "चीता"], "correct": 2, "explanation": "भारत का राष्ट्रीय पशु बाघ (Tiger) है।"},
-    {"question": "क्षेत्रफल की दृष्टि से भारत का सबसे बड़ा राज्य कौन सा है?", "options": ["महाराष्ट्र", "उत्तर प्रदेश", "राजस्थान", "मध्य प्रदेश"], "correct": 2, "explanation": "क्षेत्रफल की दृष्टि से राजस्थान सबसे बड़ा राज्य है।"}
-]
+active_sessions = {}
+ai_topic_state = {}
 
-HINDI_QUESTIONS = [
-    {"question": "'विद्यालय' शब्द का सही संधि विच्छेद क्या है?", "options": ["विद्या + आलय", "विध + आलय", "विद्य + लय", "विद्या + लय"], "correct": 0, "explanation": "विद्यालय दीर्घ स्वर संधि का उदाहरण है।"},
-    {"question": "हिंदी वर्णमाला में कुल कितने स्वर होते हैं?", "options": ["10", "11", "13", "12"], "correct": 1, "explanation": "मानक हिंदी वर्णमाला में कुल 11 स्वर होते हैं।"},
-    {"question": "'कमल' का पर्यायवाची शब्द इनमें से कौन सा है?", "options": ["जलद", "पंकज", "नीरद", "वारिधि"], "correct": 1, "explanation": "पंकज कमल का पर्यायवाची है।"},
-    {"question": "जिसकी कोई उपमा न हो, उसे क्या कहते हैं?", "options": ["अनुपम", "अद्भुत", "सुंदर", "अद्वितीय"], "correct": 0, "explanation": "जिसकी कोई उपमा न हो उसे अनुपम कहते हैं।"},
-    {"question": "'घोड़ा' का बहुवचन रूप क्या होगा?", "options": ["घोड़ें", "घोड़े", "घोड़ो", "घोड़ी"], "correct": 1, "explanation": "घोड़ा का बहुवचन 'घोड़े' होता है।"}
-]
+# ==================== AI QUESTION GENERATOR ====================
+async def generate_ai_questions(topic: str, count: int = 10):
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        return None
 
-ENGLISH_QUESTIONS = [
-    {"question": "What is the antonym of 'Brave'?", "options": ["Coward", "Bold", "Fearless", "Courageous"], "correct": 0, "explanation": "Coward is the opposite (antonym) of brave."},
-    {"question": "Choose the correct spelling:", "options": ["Recieve", "Receive", "Riciive", "Receeve"], "correct": 1, "explanation": "The correct spelling is Receive."},
-    {"question": "He ___ to school every day. (Fill in the blank)", "options": ["go", "gone", "goes", "going"], "correct": 2, "explanation": "With singular third-person 'He', we use 'goes'."},
-    {"question": "What is the synonym of 'Happy'?", "options": ["Sad", "Joyful", "Angry", "Tired"], "correct": 1, "explanation": "Joyful has a similar meaning to happy."},
-    {"question": "Identify the noun in the sentence: 'The cat slept on the mat.'", "options": ["Slept", "On", "Cat", "The"], "correct": 2, "explanation": "'Cat' is a noun in the sentence."}
-]
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
 
-ART_QUESTIONS = [
-    {"question": "ताजमहल का डिजाइन किसने तैयार किया था?", "options": ["उस्ताद अहमद लाहौरी", "उस्ताद ईसा", "शाहजहाँ", "बीरबल"], "correct": 0, "explanation": "ताजमहल के मुख्य वास्तुकार उस्ताद अहमद लाहौरी थे।"},
-    {"question": "कथकली नृत्य किस राज्य से संबंधित है?", "options": ["उत्तर प्रदेश", "केरल", "तमिलनाडु", "आंध्र प्रदेश"], "correct": 1, "explanation": "कथकली केरल का प्रमुख शास्त्रीय नृत्य है।"},
-    {"question": "कोणार्क का सूर्य मंदिर किस राज्य में स्थित है?", "options": ["उड़ीसा", "कर्नाटक", "राजस्थान", "गुजरात"], "correct": 0, "explanation": "कोणार्क का सूर्य मंदिर ओडिशा में स्थित है।"},
-    {"question": "मधुबनी चित्रकला शैली किस राज्य से प्रसिद्ध है?", "options": ["बिहार", "पश्चिम बंगाल", "मध्य प्रदेश", "पंजाब"], "correct": 0, "explanation": "मधुबनी कला बिहार के मिथिला क्षेत्र से जुड़ी है।"},
-    {"question": "कुचिपुड़ी किस राज्य का शास्त्रीय नृत्य है?", "options": ["केरल", "आंध्र प्रदेश", "ओडिशा", "मणिपुर"], "correct": 1, "explanation": "कुचिपुड़ी आंध्र प्रदेश का शास्त्रीय नृत्य है।"}
-]
+    prompt = (
+        f"Generate {count} high-level competitive exam multiple choice questions about '{topic}' in strict JSON format. "
+        "Each object in the JSON array must have keys: 'question' (string in Hindi or English), "
+        "'options' (list of 4 strings), 'correct' (integer index from 0 to 3), and 'explanation' (string). "
+        "Do not include any markdown formatting like ```json in the output, just raw JSON."
+    )
 
-user_custom_quizzes = {}
-creating_state = {}
-active_games = {}
+    payload = {
+        "model": "deepseek/deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload, timeout=35) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    content = data["choices"][0]["message"]["content"].strip()
+                    if content.startswith("```"):
+                        content = content.split("```")[1]
+                        if content.startswith("json"):
+                            content = content[4:]
+                    content = content.strip()
+                    return json.loads(content)
+    except Exception as e:
+        logging.error(f"AI Generation Error: {e}")
+    
+    return None
+
+# ==================== HANDLERS ====================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🔥 **नमस्ते! आपका स्वागत है BrainX Quiz Pro Bot में।**\n\n"
-        "🎮 **प्री-बिल्ड क्विज़ कमांड्स:**\n"
-        "👉 `/gkquiz` - GK Quiz\n"
-        "👉 `/hindiquiz` - Hindi Quiz\n"
-        "👉 `/englishquiz` - English Quiz\n"
-        "👉 `/artquiz` - Art & Culture Quiz\n\n"
-        "💡 **इंस्टेंट पोल मेकर:**\n"
-        "मैसेज में इस तरह भेजकर तुरंत पोल बनाएँ:\n"
-        "`सवाल यहाँ लिखें?`\n"
-        "`ऑप्शन 1, ऑप्शन 2, ऑप्शन 3, ऑप्शन 4`\n"
-        "`सही विकल्प का नंबर (जैसे 1)`\n\n"
-        "📌 **अन्य कमांड्स:**\n"
-        "👉 `/createquiz` - स्टेप-बाय-स्टेप क्विज़ बनाएँ\n"
-        "👉 `/myquiz` - अपनी बनाई क्विज़ खेलें\n"
-        "👉 `/stopquiz` - चल रही क्विज़ रोकें\n\n"
-        "👑 **Bot Creator & Developed By:** @krishnazxy",
-        parse_mode="Markdown"
-    )
-
-async def start_quiz_session(update: Update, context: ContextTypes.DEFAULT_TYPE, q_list, quiz_name):
     chat_id = update.effective_chat.id
-    
-    if chat_id in active_games and active_games[chat_id]["active"]:
-        await update.message.reply_text("⚠️ इस चैट में पहले से क्विज़ चल रहा है! कृपया इसे पूरा होने दें या `/stopquiz` भेजें।")
-        return
-
-    active_games[chat_id] = {
-        "questions": q_list,
-        "quiz_name": quiz_name,
-        "current_q": 0,
-        "scores": {},
-        "active": True
-    }
-    
+    if chat_id in active_sessions:
+        active_sessions[chat_id]["active"] = False
+        
+    keyboard = [
+        [
+            InlineKeyboardButton("📚 सामान्य ज्ञान (GK)", callback_data="sub_gk"),
+            InlineKeyboardButton("📜 इतिहास (History)", callback_data="sub_history"),
+        ],
+        [
+            InlineKeyboardButton("⚖️ राजव्यवस्था (Polity)", callback_data="sub_polity"),
+            InlineKeyboardButton("🔬 विज्ञान (Science)", callback_data="sub_science"),
+        ],
+        [
+            InlineKeyboardButton("👶 शिक्षाशास्त्र (Pedagogy)", callback_data="sub_pedagogy"),
+            InlineKeyboardButton("🔤 हिंदी & अंग्रेजी", callback_data="sub_hindi_eng"),
+        ],
+        [
+            InlineKeyboardButton("🤖 AI से खुद नए प्रश्न बनाएँ", callback_data="sub_ai")
+        ]
+    ]
     await update.message.reply_text(
-        f"🚀 **{quiz_name} की मेगा क्विज़ शुरू हो चुकी है!**\n"
-        f"🎯 कुल प्रश्न: {len(q_list)} | हर सवाल के लिए 15 सेकंड का समय है।"
+        f"🎯 **BrainX Ultimate PYQ & AI Master Bot** 🎯\n\n"
+        f"👑 **Creator:** @krishnazxy\n\n"
+        f"चरण 1: कृपया चुनें कि किस विषय या माध्यम से क्विज़ खेलनी है:\n\n"
+        f"💡 *टिप: आप सीधे चैट में सवाल, ऑप्शन और सही नंबर भेजकर भी तुरंत पोल बना सकते हैं!*",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    await asyncio.sleep(1)
-    await send_next_question(chat_id, context)
 
-async def gk_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await start_quiz_session(update, context, GK_QUESTIONS, "GK Quiz")
-
-async def hindi_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await start_quiz_session(update, context, HINDI_QUESTIONS, "Hindi Quiz")
-
-async def english_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await start_quiz_session(update, context, ENGLISH_QUESTIONS, "English Quiz")
-
-async def art_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await start_quiz_session(update, context, ART_QUESTIONS, "Art & Culture Quiz")
-
-async def send_next_question(chat_id, context):
-    game = active_games.get(chat_id)
-    if not game or not game["active"]:
+async def subject_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    chat_id = query.message.chat.id
+    message_id = query.message.message_id
+    
+    subject_key = query.data.split("_")[1]
+    
+    if subject_key == "ai":
+        ai_topic_state[chat_id] = "waiting_for_topic"
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text="🤖 **AI Quiz Mode:**\n\nकृपया चैट में किसी भी टॉपिक का नाम लिखकर भेजें जिस पर आप नए प्रश्न बनाना चाहते हैं (जैसे: `Rajasthan Geography` या `Indian Economy`):"
+        )
         return
 
-    q_idx = game["current_q"]
-    q_list = game["questions"]
-    
-    if q_idx >= len(q_list):
-        await show_final_leaderboard(chat_id, context)
-        return
+    active_sessions[chat_id] = {"subject": subject_key}
+    await ask_question_count(chat_id, context, message_id, subject_key.upper())
 
-    q_data = q_list[q_idx]
-    
-    await context.bot.send_poll(
+async def ask_question_count(chat_id, context, message_id, title):
+    keyboard = [
+        [
+            InlineKeyboardButton("5 प्रश्न", callback_data="cnt_5"),
+            InlineKeyboardButton("10 प्रश्न", callback_data="cnt_10"),
+            InlineKeyboardButton("15 प्रश्न", callback_data="cnt_15"),
+        ],
+        [
+            InlineKeyboardButton("20 प्रश्न", callback_data="cnt_20"),
+            InlineKeyboardButton("25 प्रश्न", callback_data="cnt_25"),
+            InlineKeyboardButton("50 प्रश्न", callback_data="cnt_50"),
+        ]
+    ]
+    await context.bot.edit_message_text(
         chat_id=chat_id,
-        question=f"[{game['quiz_name']}] प्रश्न {q_idx + 1} / {len(q_list)}:\n{q_data['question']}",
-        options=q_data["options"],
-        type="quiz",
-        correct_option_id=q_data["correct"],
-        is_anonymous=False,
-        explanation=q_data["explanation"],
-        open_period=15
+        message_id=message_id,
+        text=f"✅ विषय/मोड चुना गया: **{title}**\n\n"
+             f"चरण 2: अब चुनें कि आप **कितने प्रश्नों का सेट** खेलना चाहते हैं?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    
-    game["current_q"] += 1
-    await asyncio.sleep(16)
-    
-    if chat_id in active_games and active_games[chat_id]["active"]:
-        await send_next_question(chat_id, context)
 
+# टेक्स्ट मैसेज और इंस्टेंट पोल मेकर + AI टॉपिक हैंडलर
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     text = update.message.text
 
+    # 1. AI टॉपिक का इंतज़ार कर रहा हो
+    if chat_id in ai_topic_state and ai_topic_state[chat_id] == "waiting_for_topic":
+        topic = text.strip()
+        del ai_topic_state[chat_id]
+        
+        active_sessions[chat_id] = {"subject": "ai", "ai_topic": topic}
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("5 प्रश्न", callback_data="cnt_5"),
+                InlineKeyboardButton("10 प्रश्न", callback_data="cnt_10"),
+                InlineKeyboardButton("15 प्रश्न", callback_data="cnt_15"),
+            ],
+            [
+                InlineKeyboardButton("20 प्रश्न", callback_data="cnt_20"),
+                InlineKeyboardButton("25 प्रश्न", callback_data="cnt_25"),
+            ]
+        ]
+        await update.message.reply_text(
+            f"✅ AI टॉपिक सेट हुआ: **{topic}**\n\n"
+            f"चरण 2: अब चुनें कि AI से कितने प्रश्न तैयार करवाने हैं?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    # 2. इंस्टेंट पोल मेकर (मैसेज भेजते ही पोल बनाना)
     lines = [line.strip() for line in text.split("\n") if line.strip()]
-    if len(lines) >= 3 and chat_id not in creating_state:
+    if len(lines) >= 3 and chat_id not in active_sessions.get(chat_id, {}):
         question_text = lines[0]
         options = [opt.strip() for opt in lines[1].split(",")]
         correct_ans_str = lines[2].lower()
@@ -192,97 +247,120 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
 
-    if chat_id not in creating_state:
-        return
-
-    state = creating_state[chat_id]
-    step = state["step"]
-
-    if step == "get_title":
-        state["title"] = text
-        state["step"] = "get_question"
-        await update.message.reply_text(f"✅ क्विज़ का नाम: **{text}** सेट हो गया है।\n\nअब अपने **पहले सवाल (Question)** को लिखकर भेजें:")
-
-    elif step == "get_question":
-        state["current_q"] = text
-        state["step"] = "get_options"
-        await update.message.reply_text("अब इस सवाल के **4 विकल्प (Options)** कॉमा (,) लगाकर भेजें:")
-
-    elif step == "get_options":
-        options = [opt.strip() for opt in text.split(",")]
-        if len(options) < 2:
-            await update.message.reply_text("⚠️ कृपया कम से कम 2 विकल्प सही फॉर्मेट में भेजें:")
-            return
-        state["current_options"] = options
-        state["step"] = "get_correct"
-        await update.message.reply_text("अब सही विकल्प का **नंबर** (जैसे 1 या 2) लिखकर भेजें:")
-
-    elif step == "get_correct":
-        try:
-            correct_num = int(text.strip()) - 1
-            options = state["current_options"]
-            if not (0 <= correct_num < len(options)):
-                raise ValueError()
-        except ValueError:
-            await update.message.reply_text("⚠️ कृपया सही विकल्प का मान्य नंबर भेजें:")
-            return
-
-        state["current_correct"] = correct_num
-        state["step"] = "get_explanation"
-        await update.message.reply_text("💡 अब इस सवाल का **स्पष्टीकरण (Explanation)** लिखकर भेजें:")
-
-    elif step == "get_explanation":
-        explanation = text.strip()
-        state["questions"].append({
-            "question": state["current_q"],
-            "options": state["current_options"],
-            "correct": state["current_correct"],
-            "explanation": explanation
-        })
-
-        state["step"] = "ask_more"
-        keyboard = [
-            [InlineKeyboardButton("➕ और सवाल जोड़ें", callback_data="add_more_q")],
-            [InlineKeyboardButton("✅ क्विज़ समाप्त और सेव करें", callback_data="finish_my_quiz")]
-        ]
-        await update.message.reply_text(f"✅ सवाल जुड़ गया! कुल सवाल: **{len(state['questions'])}**", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def create_quiz_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    creating_state[chat_id] = {"step": "get_title", "questions": []}
-    await update.message.reply_text("📝 **नई क्विज़ बनाने की प्रक्रिया शुरू!** अपनी इस क्विज़ का **शीर्षक (Title)** भेजें:")
-
-async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def count_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     chat_id = query.message.chat.id
+    message_id = query.message.message_id
+    
+    count_val = int(query.data.split("_")[1])
+    if chat_id not in active_sessions:
+        active_sessions[chat_id] = {}
+    active_sessions[chat_id]["count"] = count_val
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("⚡ 10s प्रति प्रश्न", callback_data="t_10"),
+            InlineKeyboardButton("⏱️ 15s प्रति प्रश्न", callback_data="t_15"),
+            InlineKeyboardButton("🧠 20s प्रति प्रश्न", callback_data="t_20"),
+        ]
+    ]
+    await context.bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=message_id,
+        text=f"✅ प्रश्न संख्या: **{count_val} प्रश्न** सेट हो गए।\n\n"
+             f"चरण 3: प्रति प्रश्न के लिए **समय (Timer)** चुनें:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
-    if query.data == "add_more_q":
-        if chat_id in creating_state:
-            creating_state[chat_id]["step"] = "get_question"
-            await query.message.reply_text("📝 अगला नया सवाल भेजें:")
-
-    elif query.data == "finish_my_quiz":
-        if chat_id in creating_state:
-            quiz_data = creating_state[chat_id]
-            user_custom_quizzes[chat_id] = quiz_data
-            keyboard = [[InlineKeyboardButton("🚀 इस क्विज़ को खेलें", callback_data="play_my_quiz")]]
-            await query.message.edit_text(
-                f"🎉 **कस्टम क्विज़ तैयार है!**\n📌 **नाम:** {quiz_data['title']}\n📊 **कुल प्रश्न:** {len(quiz_data['questions'])}\n👑 **Created by:** @krishnazxy",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            del creating_state[chat_id]
-
-    elif query.data == "play_my_quiz":
-        if chat_id in user_custom_quizzes:
-            await start_quiz_session(update, context, user_custom_quizzes[chat_id]["questions"], user_custom_quizzes[chat_id]["title"])
-
-async def play_my_quiz_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    if chat_id in user_custom_quizzes:
-        await start_quiz_session(update, context, user_custom_quizzes[chat_id]["questions"], user_custom_quizzes[chat_id]["title"])
+async def timer_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    chat_id = query.message.chat.id
+    message_id = query.message.message_id
+    
+    timer_val = int(query.data.split("_")[1])
+    session_data = active_sessions.get(chat_id, {})
+    subject_key = session_data.get("subject", "gk")
+    count_val = session_data.get("count", 10)
+    
+    if subject_key == "ai":
+        topic = session_data.get("ai_topic", "General Studies")
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=f"🤖 **AI '{topic}' पर {count_val} नए प्रश्न तैयार कर रहा है...** कृपया थोड़ा इंतज़ार करें।"
+        )
+        
+        selected_questions = await generate_ai_questions(topic, count=count_val)
+        if not selected_questions or not isinstance(selected_questions, list):
+            await context.bot.send_message(chat_id, "❌ AI प्रश्न जनरेट करने में असफल रहा। कृपया /start से दोबारा प्रयास करें।")
+            return
+        quiz_name = f"AI Quiz: {topic}"
     else:
-        await update.message.reply_text("⚠️ आपकी कोई कस्टम क्विज़ नहीं मिली। `/createquiz` से बनाएँ!")
+        available_qs = SUBJECTS_DB.get(subject_key, SUBJECTS_DB["gk"])
+        selected_questions = random.sample(available_qs, min(count_val, len(available_qs)))
+        quiz_name = f"{subject_key.upper()} PYQ Set"
+        
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=f"🚀 **{quiz_name} शुरू हो चुकी है!**\n📊 कुल प्रश्न: {len(selected_questions)} | ⏱️ टाइमर: {timer_val}s\n\nपहला प्रश्न आ रहा है..."
+        )
+
+    active_sessions[chat_id] = {
+        "questions": selected_questions,
+        "quiz_name": quiz_name,
+        "current_q": 0,
+        "scores": {},
+        "timer": timer_val,
+        "active": True
+    }
+    
+    await asyncio.sleep(1)
+    await send_next_question(chat_id, context)
+
+async def send_next_question(chat_id, context):
+    game = active_sessions.get(chat_id)
+    if not game or not game["active"]:
+        return
+
+    q_idx = game["current_q"]
+    q_list = game["questions"]
+    timer = game["timer"]
+    
+    if q_idx >= len(q_list):
+        if game["active"]:
+            game["active"] = False
+            await show_final_leaderboard(chat_id, context)
+        return
+
+    q_data = q_list[q_idx]
+    
+    try:
+        await context.bot.send_poll(
+            chat_id=chat_id,
+            question=f"[{game['quiz_name']}] प्रश्न {q_idx + 1} / {len(q_list)}:\n{q_data['question']}",
+            options=q_data["options"],
+            type="quiz",
+            correct_option_id=q_data["correct"],
+            is_anonymous=False,
+            explanation=q_data.get("explanation", "सही उत्तर चुनें!"),
+            open_period=timer
+        )
+        
+        game["current_q"] += 1
+        
+        for _ in range(timer + 1):
+            await asyncio.sleep(1)
+            if chat_id not in active_sessions or not active_sessions[chat_id]["active"]:
+                return
+
+        if chat_id in active_sessions and active_sessions[chat_id]["active"]:
+            await send_next_question(chat_id, context)
+            
+    except Exception as e:
+        logging.error(f"Error sending poll: {e}")
 
 async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     answer = update.poll_answer
@@ -291,31 +369,38 @@ async def receive_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_name = user.first_name if user.first_name else "Khiladi"
     selected_options = answer.option_ids
 
-    for chat_id, game in active_games.items():
+    for chat_id, game in active_sessions.items():
         if game["active"]:
             q_idx = game["current_q"] - 1
             q_list = game["questions"]
+
             if 0 <= q_idx < len(q_list):
                 correct_opt = q_list[q_idx]["correct"]
                 if user_id not in game["scores"]:
                     game["scores"][user_id] = {"name": user_name, "score": 0}
+
                 if correct_opt in selected_options:
                     game["scores"][user_id]["score"] += 1
+            break
 
 async def stop_quiz_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    if chat_id in active_games and active_games[chat_id]["active"]:
-        active_games[chat_id]["active"] = False
-        await update.message.reply_text("🛑 **क्विज़ रोक दी गई है!**")
+    if chat_id in active_sessions and active_sessions[chat_id]["active"]:
+        active_sessions[chat_id]["active"] = False
+        await update.message.reply_text("🛑 **क्विज़ को तुरंत रोक दिया गया है!**")
         await show_final_leaderboard(chat_id, context)
     else:
         await update.message.reply_text("⚠️ इस समय कोई क्विज़ सक्रिय नहीं है।")
 
 async def show_final_leaderboard(chat_id, context):
-    game = active_games[chat_id]
+    if chat_id not in active_sessions:
+        return
+        
+    game = active_sessions[chat_id]
     game["active"] = False
     scores_dict = game["scores"]
     quiz_name = game["quiz_name"]
+    total_qs = len(game["questions"])
 
     report = f"🏆 **====================** 🏆\n"
     report += f"   🌟 **{quiz_name.upper()} LEADERBOARD** 🌟\n"
@@ -329,45 +414,42 @@ async def show_final_leaderboard(chat_id, context):
         sorted_players = sorted(scores_dict.values(), key=lambda x: x["score"], reverse=True)
         first_winner = sorted_players[0]
 
-        report += f"🎉 **चैंपियन विनर:** {first_winner['name']} (स्कोर: {first_winner['score']}) 🥇\n\n"
-        report += "📜 **सभी खिलाड़ियों की सूची (Scoreboard):**\n"
+        report += f"🎉 **चैंपियन विनर:** {first_winner['name']} (स्कोर: {first_winner['score']}/{total_qs}) 🥇\n\n"
+        report += "📜 **सभी खिलाड़ियों की स्कोरलिस्ट:**\n"
         report += "----------------------------------------\n"
         for idx, player in enumerate(sorted_players, start=1):
             medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"#{idx}"
             report += f"{medal} **{player['name']}** — {player['score']} Points\n"
         report += "----------------------------------------\n"
 
-    report += "💖 *जीत-हार खेल का हिस्सा है, आप सभी शानदार खिलाड़ी हैं!* ✨"
+    report += "💖 *शानदार प्रयास! अपनी तैयारी जारी रखें।* ✨"
     await context.bot.send_message(chat_id=chat_id, text=report)
+    if chat_id in active_sessions:
+        del active_sessions[chat_id]
 
 async def main():
-    # 🔒 आपका नया सुरक्षित टोकन अपडेट कर दिया गया है
-        # Render के Environment Variable से टोकन सुरक्षित रूप से उठाएगा
     TOKEN = os.environ.get("BOT_TOKEN")
+    if not TOKEN:
+        print("Error: BOT_TOKEN not found!")
+        return
 
-    
     await start_web_server()
     
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("gkquiz", gk_cmd))
-    app.add_handler(CommandHandler("hindiquiz", hindi_cmd))
-    app.add_handler(CommandHandler("englishquiz", english_cmd))
-    app.add_handler(CommandHandler("artquiz", art_cmd))
-    app.add_handler(CommandHandler("createquiz", create_quiz_start))
-    app.add_handler(CommandHandler("myquiz", play_my_quiz_cmd))
     app.add_handler(CommandHandler("stopquiz", stop_quiz_cmd))
-    
+    app.add_handler(CallbackQueryHandler(subject_callback_handler, pattern="^sub_"))
+    app.add_handler(CallbackQueryHandler(count_callback_handler, pattern="^cnt_"))
+    app.add_handler(CallbackQueryHandler(timer_callback_handler, pattern="^t_"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
-    app.add_handler(CallbackQueryHandler(button_callback_handler))
     app.add_handler(PollAnswerHandler(receive_poll_answer))
 
-    print("BrainX Ultimate Quiz Pro Bot is running securely 24/7...")
+    print("BrainX Ultimate All-Exam AI PYQ Master Bot is running...")
     
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    app.initialize()
+    app.start()
+    app.updater.start_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
     
     import asyncio
     await asyncio.Event().wait()
