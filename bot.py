@@ -141,11 +141,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     await update.message.reply_text(
-        f"🎯 **BrainX Ultimate PYQ & AI Master Bot** 🎯\n\n"
-        f"👑 **Creator:** @krishnazxy\n\n"
-        f"चरण 1: कृपया चुनें कि किस विषय या माध्यम से क्विज़ खेलनी है:\n\n"
-        f"💡 *टिप: आप सीधे चैट में सवाल, ऑप्शन और सही नंबर भेजकर भी तुरंत पोल बना सकते हैं!*",
+        f"✨ **BrainX Ultimate Quiz Bot** ✨\n"
+        f"📚 यहाँ SSC, UPSC, REET, UPTET जैसी सभी प्रतियोगी परीक्षाओं के लिए बेस्ट PYQs और AI से नए सवाल मिलते हैं।\n"
+        f"⏱️ अपनी पसंद का विषय, प्रश्नों की संख्या और टाइमर (10s/15s/20s) चुनकर आज ही अपनी तैयारी परखें।\n"
+        f"📊 किसी भी टेक्स्ट को तुरंत पोल में बदलें या `/stopquiz` से कभी भी क्विज़ रोककर लाइव लीडरबोर्ड देखें।\n\n"
+        f"👑 **Created & Developed By:** @krishnazxy\n\n"
+        f"चरण 1: कृपया चुनें कि किस विषय या माध्यम से क्विज़ खेलनी है:",
         reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# नई मेनू कमांड (Menu Command)
+async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📋 **BrainX Bot Command Menu:**\n\n"
+        "👉 `/start` या `/quiz` - नई क्विज़ शुरू करने के लिए मुख्य मेनू खोलें\n"
+        "👉 `/menu` - सभी कमांड्स की सूची देखने के लिए\n"
+        "👉 `/stopquiz` - चल रही क्विज़ को तुरंत रोकने और लीडरबोर्ड देखने के लिए\n\n"
+        "💡 **इंस्टेंट पोल मेकर:**\n"
+        "चैट में इस फॉर्मेट में मैसेज भेजें:\n"
+        "`सवाल यहाँ लिखें?`\n"
+        "`ऑप्शन 1, ऑप्शन 2, ऑप्शन 3, ऑप्शन 4`\n"
+        "`सही विकल्प का नंबर (जैसे 1)`\n\n"
+        "👑 **Bot Creator:** @krishnazxy",
+        parse_mode="Markdown"
     )
 
 async def subject_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -189,12 +207,10 @@ async def ask_question_count(chat_id, context, message_id, title):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# टेक्स्ट मैसेज और इंस्टेंट पोल मेकर + AI टॉपिक हैंडलर
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     text = update.message.text
 
-    # 1. AI टॉपिक का इंतज़ार कर रहा हो
     if chat_id in ai_topic_state and ai_topic_state[chat_id] == "waiting_for_topic":
         topic = text.strip()
         del ai_topic_state[chat_id]
@@ -219,7 +235,6 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
-    # 2. इंस्टेंट पोल मेकर (मैसेज भेजते ही पोल बनाना)
     lines = [line.strip() for line in text.split("\n") if line.strip()]
     if len(lines) >= 3 and chat_id not in active_sessions.get(chat_id, {}):
         question_text = lines[0]
@@ -438,7 +453,10 @@ async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("quiz", start))  # /quiz कमांड जोड़ी गई
+    app.add_handler(CommandHandler("menu", menu_cmd))  # /menu कमांड जोड़ी गई
     app.add_handler(CommandHandler("stopquiz", stop_quiz_cmd))
+    
     app.add_handler(CallbackQueryHandler(subject_callback_handler, pattern="^sub_"))
     app.add_handler(CallbackQueryHandler(count_callback_handler, pattern="^cnt_"))
     app.add_handler(CallbackQueryHandler(timer_callback_handler, pattern="^t_"))
