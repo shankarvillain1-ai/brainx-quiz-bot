@@ -342,7 +342,9 @@ async def show_final_leaderboard(chat_id, context):
 
 async def main():
     # 🔒 आपका नया सुरक्षित टोकन अपडेट कर दिया गया है
-    TOKEN = "8959348945:AAEMMcO3jXYeI5ylymY2dJE75NAqYxJPbxY"
+        # Render के Environment Variable से टोकन सुरक्षित रूप से उठाएगा
+    TOKEN = os.environ.get("BOT_TOKEN")
+
     
     await start_web_server()
     
